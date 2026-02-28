@@ -1,0 +1,293 @@
+<?php
+include_once 'connectdb.php';
+session_start();
+
+if(!isset($_SESSION['useremail']) || $_SESSION['role'] != "Admin"){
+    header('location:../index.php');
+    exit;
+}
+
+/* DELETE */
+if(isset($_GET['delete'])){
+    $delete_id = $_GET['delete'];
+    $delete = $pdo->prepare("DELETE FROM tbl_user WHERE userid=:id");
+    $delete->bindParam(':id', $delete_id);
+
+    if($delete->execute()){
+        echo "<script>alert('User deleted successfully'); window.location='registration.php';</script>";
+        exit;
+    }
+}
+
+/* EDIT FETCH */
+$edit_mode = false;
+if(isset($_GET['edit'])){
+    $edit_id = $_GET['edit'];
+    $edit = $pdo->prepare("SELECT * FROM tbl_user WHERE userid=:id");
+    $edit->bindParam(':id', $edit_id);
+    $edit->execute();
+    $edit_user = $edit->fetch(PDO::FETCH_ASSOC);
+    if($edit_user){ $edit_mode = true; }
+}
+
+/* INSERT / UPDATE */
+if(isset($_POST['btnsave'])){
+
+    $username     = $_POST['txtname'];
+    $useremail    = $_POST['txtemail'];
+    $userpassword = $_POST['txtpassword'];
+    $useraddress  = $_POST['txtaddress'];
+    $userage      = $_POST['txtage'];
+    $usercontact  = $_POST['txtcontact'];
+    $role         = $_POST['txtrole'];
+
+    $imgName = null;
+
+    if(isset($_FILES['txtimage']) && $_FILES['txtimage']['error'] == 0){
+        $imgTmp  = $_FILES['txtimage']['tmp_name'];
+        $imgName = time().'_'.basename($_FILES['txtimage']['name']);
+        $imgPath = "uploads/".$imgName;
+
+        if(!is_dir("uploads")){
+            mkdir("uploads", 0777, true);
+        }
+        move_uploaded_file($imgTmp, $imgPath);
+    }
+
+    if(isset($_POST['userid']) && !empty($_POST['userid'])){
+
+        if($imgName != null){
+            $update = $pdo->prepare("UPDATE tbl_user SET 
+                username=:name,useremail=:email,userpassword=:password,
+                useraddress=:address,userage=:age,usercontact=:contact,
+                role=:role,userimage=:image WHERE userid=:id");
+            $update->bindParam(':image',$imgName);
+        } else {
+            $update = $pdo->prepare("UPDATE tbl_user SET 
+                username=:name,useremail=:email,userpassword=:password,
+                useraddress=:address,userage=:age,usercontact=:contact,
+                role=:role WHERE userid=:id");
+        }
+
+        $update->bindParam(':name',$username);
+        $update->bindParam(':email',$useremail);
+        $update->bindParam(':password',$userpassword);
+        $update->bindParam(':address',$useraddress);
+        $update->bindParam(':age',$userage);
+        $update->bindParam(':contact',$usercontact);
+        $update->bindParam(':role',$role);
+        $update->bindParam(':id',$_POST['userid']);
+
+        if($update->execute()){
+            echo "<script>alert('User updated successfully'); window.location='registration.php';</script>";
+            exit;
+        }
+
+    } else {
+
+        $check = $pdo->prepare("SELECT * FROM tbl_user WHERE useremail=:email");
+        $check->bindParam(':email', $useremail);
+        $check->execute();
+
+        if($check->rowCount() > 0){
+            echo "<script>alert('This email is already registered.');</script>";
+        } else {
+
+            if($imgName == null){ $imgName = "default.png"; }
+
+            $insert = $pdo->prepare("INSERT INTO tbl_user 
+            (username,useremail,userpassword,useraddress,userage,usercontact,role,userimage) 
+            VALUES (:name,:email,:password,:address,:age,:contact,:role,:image)");
+
+            $insert->bindParam(':name',$username);
+            $insert->bindParam(':email',$useremail);
+            $insert->bindParam(':password',$userpassword);
+            $insert->bindParam(':address',$useraddress);
+            $insert->bindParam(':age',$userage);
+            $insert->bindParam(':contact',$usercontact);
+            $insert->bindParam(':role',$role);
+            $insert->bindParam(':image',$imgName);
+
+            if($insert->execute()){
+                echo "<script>alert('User registered successfully'); window.location='registration.php';</script>";
+                exit;
+            }
+        }
+    }
+}
+
+include_once "header.php";
+?>
+
+<style>
+body{
+    background:#f4f6f9;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.card-box{
+    background:#fff;
+    padding:25px;
+    border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,0.08);
+}
+
+.btn-main{
+    background:#007bff;
+    color:#fff;
+    padding:10px 18px;
+    border:none;
+    border-radius:6px;
+}
+.btn-success{
+    background:#28a745;
+    color:#fff;
+    border:none;
+    padding:6px 12px;
+    border-radius:6px;
+}
+.btn-danger{
+    background:#dc3545;
+    color:#fff;
+    border:none;
+    padding:6px 12px;
+    border-radius:6px;
+}
+
+input, select{
+    width:100%;
+    padding:10px;
+    border:1px solid #ddd;
+    border-radius:6px;
+    margin-bottom:12px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+table thead{
+    background:#007bff;
+    color:#fff;
+}
+
+table th, table td{
+    padding:12px;
+    text-align:center;
+}
+
+table tbody tr:nth-child(even){
+    background:#f9f9f9;
+}
+
+.user-img{
+    width:45px;
+    height:45px;
+    border-radius:50%;
+    object-fit:cover;
+    border:2px solid #ddd;
+}
+</style>
+
+<div class="content-wrapper" style="padding:25px;">
+<div class="card-box">
+
+<h3>User Registration Management</h3>
+
+<button id="showRegisterForm" class="btn-main">+ Register New User</button>
+
+<br><br>
+
+<div id="registerForm" style="<?php echo $edit_mode ? 'display:block;' : 'display:none;'; ?>">
+
+<form method="POST" enctype="multipart/form-data">
+
+<input type="hidden" name="userid" value="<?php if($edit_mode) echo $edit_user['userid']; ?>">
+
+<input type="text" name="txtname" placeholder="Full Name" required value="<?php if($edit_mode) echo $edit_user['username']; ?>">
+<input type="email" name="txtemail" placeholder="Email Address" required value="<?php if($edit_mode) echo $edit_user['useremail']; ?>">
+<input type="password" name="txtpassword" placeholder="Password" required value="<?php if($edit_mode) echo $edit_user['userpassword']; ?>">
+<input type="text" name="txtaddress" placeholder="Address" required value="<?php if($edit_mode) echo $edit_user['useraddress']; ?>">
+<input type="number" name="txtage" placeholder="Age" required value="<?php if($edit_mode) echo $edit_user['userage']; ?>">
+<input type="text" name="txtcontact" placeholder="Contact Number" required value="<?php if($edit_mode) echo $edit_user['usercontact']; ?>">
+
+<select name="txtrole" required>
+<option value="">Select Role</option>
+<option value="Admin" <?php if($edit_mode && $edit_user['role']=="Admin") echo "selected"; ?>>Admin</option>
+<option value="User" <?php if($edit_mode && $edit_user['role']=="User") echo "selected"; ?>>User</option>
+</select>
+
+<input type="file" name="txtimage">
+
+<button type="submit" name="btnsave" class="btn-success">
+<?php echo $edit_mode ? "Update User" : "Save User"; ?>
+</button>
+
+<a href="registration.php" class="btn-danger" style="text-decoration:none;">Cancel</a>
+
+</form>
+</div>
+
+<div id="usersTable" style="<?php echo $edit_mode ? 'display:none;' : 'display:block;'; ?>">
+
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Image</th>
+<th>Name</th>
+<th>Email</th>
+<th>Role</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+
+<?php
+$stmt = $pdo->prepare("SELECT userid, username, useremail, role, userimage FROM tbl_user ORDER BY userid DESC");
+$stmt->execute();
+$users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+foreach($users as $user){
+
+$imagePath = !empty($user['userimage']) && file_exists("uploads/".$user['userimage'])
+    ? "uploads/".$user['userimage']
+    : "uploads/default.png";
+
+echo "<tr>
+<td>{$user['userid']}</td>
+<td><img src='{$imagePath}' class='user-img'></td>
+<td>{$user['username']}</td>
+<td>{$user['useremail']}</td>
+<td>{$user['role']}</td>
+<td>
+<div class='btn-group'>
+<a href='registration.php?edit={$user['userid']}' class='btn btn-success btn-xs' role='button'>
+<span class='fa fa-edit' data-toggle='tooltip' title='Edit User'></span>
+</a>
+<a href='registration.php?delete={$user['userid']}' onclick='return confirm(\"Delete this user?\")' class='btn btn-danger btn-xs' role='button'>
+<span class='fa fa-trash' data-toggle='tooltip' title='Delete User'></span>
+</a>
+</div>
+</td>
+</tr>";
+}
+?>
+
+</tbody>
+</table>
+
+</div>
+
+</div>
+</div>
+
+<script>
+document.getElementById("showRegisterForm").addEventListener("click", function() {
+    document.getElementById("registerForm").style.display = "block";
+    document.getElementById("usersTable").style.display = "none";
+});
+</script>
+
+<?php include 'footer.php'; ?> 
